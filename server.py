@@ -102,21 +102,30 @@ INTENT_VALUES = {
 # Intent classification patterns (rule-based – Claude can refine after)
 INTENT_PATTERNS = {
     "transactional": [
-        r"\b(buy|order|purchase|book|hire|get|download|sign[\s-]?up|subscribe)\b",
-        r"\b(coupon|deal|discount|offer|cheap|free trial|pricing|price)\b",
-        r"\b(near me|nearby|local|in \w+ city)\b",
+        r"\b(buy|order|purchase|book|hire|get|download|sign[\s-]?up|subscribe|register|reserve|enroll)\b",
+        r"\b(coupon|deal|discount|offer|cheap|free trial|pricing|price|ticket|tickets|pass|passes|entry)\b",
+        r"\b(near me|nearby|open now|hours|directions)\b",
+        # city/geo + service = local transactional (e.g. "nyc bar crawl", "chicago pub crawl")
+        r"\b(nyc|new york|manhattan|brooklyn|queens|bronx|chicago|boston|la|los angeles|miami|dallas|houston|seattle|denver|atlanta|philadelphia|phoenix|san francisco|sf|dc|washington)\b",
+        r"\b(in [a-z]+ (city|tx|ca|ny|fl|il|wa|co|ga|pa|az|ma|nc|oh))\b",
     ],
     "commercial": [
-        r"\b(best|top|review|reviews|vs|versus|comparison|compare|alternative)\b",
-        r"\b(which|recommended|rated|ranking)\b",
+        r"\b(best|top|review|reviews|vs|versus|comparison|compare|alternative|alternatives)\b",
+        r"\b(which|recommended|rated|ranking|worth it|worth)\b",
+        r"\b(agency|service|services|company|companies|provider|providers|platform|tool|tools|software)\b",
+        r"\b(affordable|cheap|expensive|premium|budget|cost effective|value)\b",
+        # local modifier without immediate city name = commercial research
+        r"\b(local|near|around|in my area|in [a-z]+ area)\b",
     ],
     "navigational": [
-        r"\b(login|sign in|dashboard|account|portal)\b",
+        r"\b(login|sign in|dashboard|account|portal|logout|my account)\b",
         r"^\s*[A-Z][a-zA-Z]+\s*$",  # brand-name only
     ],
     "informational": [
-        r"\b(how|what|why|when|where|who|guide|tutorial|tips|learn)\b",
-        r"\b(definition|meaning|explained|example|examples)\b",
+        r"\b(how|what|why|when|where|who|guide|tutorial|tips|learn|understand)\b",
+        r"\b(definition|meaning|explained|example|examples|overview|introduction|beginner)\b",
+        r"\b(does|do|can|should|is|are|will|would|could)\b",
+        r"\b(history|origin|difference between|types of|list of|ideas)\b",
     ],
 }
 
@@ -323,6 +332,15 @@ def cluster_keywords(keywords: list[str], cluster_count: int = 8) -> dict:
     if len(keywords) < 2:
         return {"error": "Need at least 2 keywords to cluster"}
 
+    warning = None
+    if len(keywords) < 100:
+        warning = (
+            f"Only {len(keywords)} keywords provided. Clusters will be thin and "
+            f"topical coverage unreliable. Feed 100-200 keywords minimum for "
+            f"accurate tier assignment and gap detection. Use SE Ranking MCP or "
+            f"Ahrefs to pull domain organic keywords before clustering."
+        )
+
     cluster_count = min(cluster_count, len(keywords))
     vectors = _embed(keywords)
     labels = AgglomerativeClustering(
@@ -347,11 +365,14 @@ def cluster_keywords(keywords: list[str], cluster_count: int = 8) -> dict:
             "keyword_count": len(cluster_kws),
         })
 
-    return {
+    result = {
         "total_keywords": len(keywords),
         "cluster_count": len(clusters),
         "clusters": clusters,
     }
+    if warning:
+        result["warning"] = warning
+    return result
 
 
 @mcp.tool()
